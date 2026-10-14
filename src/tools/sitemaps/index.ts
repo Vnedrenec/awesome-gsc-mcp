@@ -40,7 +40,7 @@ export function registerSitemapTools(server: McpServer, api: GscApiClient): void
           const text = formatToolResponse(createToolResponse(
             '_No sitemaps found for this property._',
             `No sitemaps found for ${siteUrl}.`,
-            ['Submit a sitemap in Search Console (this server is read-only) to help Google discover your pages.'],
+            ['Submit a sitemap using submit_sitemap to help Google discover your pages.'],
             [],
           ));
           return { content: [{ type: 'text' as const, text }] };
@@ -159,6 +159,74 @@ export function registerSitemapTools(server: McpServer, api: GscApiClient): void
         ];
 
         const text = formatToolResponse(createToolResponse(data, summary, recommendations, limitations));
+        return { content: [{ type: 'text' as const, text }] };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  // ── submit_sitemap ───────────────────────────────────────────────────
+  server.tool(
+    'submit_sitemap',
+    'Submit a new sitemap to Google Search Console for a property',
+    { siteUrl: siteUrlSchema, feedpath: feedpathSchema },
+    async ({ siteUrl, feedpath }) => {
+      try {
+        await api.submitSitemap(siteUrl, feedpath);
+
+        const summary = `Successfully submitted sitemap ${feedpath} for ${siteUrl}.`;
+
+        const recommendations = [
+          'Check back in a few hours to verify processing.',
+          'Use get_sitemap_details to monitor the processing status.',
+          'Ensure the sitemap is accessible at the submitted URL and returns valid XML.',
+        ];
+
+        const limitations = [
+          'Submitting a sitemap does not guarantee all URLs will be crawled or indexed.',
+          'Google processes sitemaps on its own schedule.',
+        ];
+
+        const text = formatToolResponse(createToolResponse(
+          `Sitemap **${feedpath}** has been submitted for property **${siteUrl}**.`,
+          summary,
+          recommendations,
+          limitations,
+        ));
+        return { content: [{ type: 'text' as const, text }] };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  // ── delete_sitemap ───────────────────────────────────────────────────
+  server.tool(
+    'delete_sitemap',
+    'Remove a submitted sitemap from Google Search Console',
+    { siteUrl: siteUrlSchema, feedpath: feedpathSchema },
+    async ({ siteUrl, feedpath }) => {
+      try {
+        await api.deleteSitemap(siteUrl, feedpath);
+
+        const summary = `Successfully removed sitemap ${feedpath} from ${siteUrl}.`;
+
+        const recommendations = [
+          'If removed by mistake, resubmit the sitemap using submit_sitemap.',
+          'Removing a sitemap does not remove the URLs from Google\'s index.',
+        ];
+
+        const limitations = [
+          'Google may continue to crawl URLs that were in the sitemap if they are linked from other pages.',
+        ];
+
+        const text = formatToolResponse(createToolResponse(
+          `Sitemap **${feedpath}** has been removed from property **${siteUrl}**.`,
+          summary,
+          recommendations,
+          limitations,
+        ));
         return { content: [{ type: 'text' as const, text }] };
       } catch (error) {
         return errorResponse(error);

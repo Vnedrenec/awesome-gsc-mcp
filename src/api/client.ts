@@ -21,10 +21,12 @@ import {
   querySearchAnalytics,
   querySearchAnalyticsAllRows,
 } from './search-analytics.js';
-import { listSites, getSite } from './sites.js';
+import { listSites, getSite, addSite, deleteSite } from './sites.js';
 import {
   listSitemaps,
   getSitemap,
+  submitSitemap,
+  deleteSitemap,
 } from './sitemaps.js';
 import { inspectUrl, batchInspectUrls } from './url-inspection.js';
 
@@ -92,6 +94,16 @@ export class GscApiClient {
     return getSite(this.webmasters, siteUrl, this.cache, this.rateLimiter);
   }
 
+  /** Add a site to Search Console. */
+  async addSite(siteUrl: string): Promise<void> {
+    return addSite(this.webmasters, siteUrl, this.cache, this.rateLimiter);
+  }
+
+  /** Remove a site from Search Console. */
+  async deleteSite(siteUrl: string): Promise<void> {
+    return deleteSite(this.webmasters, siteUrl, this.cache, this.rateLimiter);
+  }
+
   // -------------------------------------------------------------------------
   // Sitemaps
   // -------------------------------------------------------------------------
@@ -104,6 +116,28 @@ export class GscApiClient {
   /** Get details for a specific sitemap. */
   async getSitemap(siteUrl: string, feedpath: string): Promise<SitemapInfo> {
     return getSitemap(
+      this.webmasters,
+      siteUrl,
+      feedpath,
+      this.cache,
+      this.rateLimiter,
+    );
+  }
+
+  /** Submit (or resubmit) a sitemap. */
+  async submitSitemap(siteUrl: string, feedpath: string): Promise<void> {
+    return submitSitemap(
+      this.webmasters,
+      siteUrl,
+      feedpath,
+      this.cache,
+      this.rateLimiter,
+    );
+  }
+
+  /** Delete a sitemap. */
+  async deleteSitemap(siteUrl: string, feedpath: string): Promise<void> {
+    return deleteSitemap(
       this.webmasters,
       siteUrl,
       feedpath,

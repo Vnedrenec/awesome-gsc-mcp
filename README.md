@@ -6,14 +6,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg)](https://nodejs.org/)
 
-> **Hardened read-only fork.** This fork can only read Search Console data:
-> the OAuth scope is `webmasters.readonly`, the write tools (`add_property`,
-> `delete_property`, `submit_sitemap`, `delete_sitemap`) are gone, auth is
-> service-account only (no OAuth tokens on disk, no `./credentials.json`
-> pickup from the working directory), and the unauthenticated HTTP transport
-> is removed: stdio only. The npm package `awesome-gsc-mcp` is the upstream
-> code **with** write access, so run this fork from a local build, not `npx`.
-
 ---
 
 ## Demo
@@ -38,12 +30,12 @@ Just ask it to analyze your Google Search Console.
 
 ## Features
 
-- **23 read-only tools** across 7 categories covering every aspect of Google Search Console
+- **27 tools** across 7 categories covering every aspect of Google Search Console
 - **Smart analysis engine** with CTR benchmarks, trend detection, query intent classification, opportunity scoring, and a recommendation engine
 - **In-memory caching** for fast repeat queries
 - **Rate limiting** (20 req/s with burst of 30) to stay within API quotas
 - **Dual transport** -- stdio (default) and HTTP for flexible integration
-- **Read-only by construction** -- service account with the `webmasters.readonly` scope; Google rejects any write
+- **Auto-detecting authentication** -- service account, OAuth, or auto-detect from `credentials.json`
 
 ---
 
@@ -105,7 +97,7 @@ Enable the [Search Console API](https://console.cloud.google.com/apis/library/se
 
 - Open [Google Search Console](https://search.google.com/search-console/)
 - Go to [**Settings > Users and permissions**](https://search.google.com/search-console/users)
-- Add the service account email with **Restricted** permission. If a tool answers 403, raise it to **Full**: the read-only scope still blocks writes. Never make it an **Owner**
+- Add the service account email as an **Owner** or **Full**
 
 <table><tr><td>
 <img width="600" alt="Add service account to Search Console" src="https://github.com/user-attachments/assets/a2847ae9-e980-445c-a1ed-26d3c68b4d27" />
@@ -117,42 +109,82 @@ Enable the [Search Console API](https://console.cloud.google.com/apis/library/se
 
 You're almost done. Now we will just refrence the JSON file you downloaded in step 4 (Create credentials).
 
-Build the fork once:
-
-```bash
-git clone https://github.com/Vnedrenec/awesome-gsc-mcp.git
-cd awesome-gsc-mcp
-npm ci --ignore-scripts
-npm run build
-```
-
 **Claude Code**
 
-Options go before `--`; everything after it is the server command.
-
 ```bash
-claude mcp add awesome-gsc --scope user \
-  -e GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json \
-  -- node /path/to/awesome-gsc-mcp/dist/cli.js
+claude mcp add awesome-gsc -- npx -y awesome-gsc-mcp \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
 ```
 
-Keep the key file outside any git repository and readable only by you
-(`chmod 600 /path/to/service-account-key.json`).
+> **Tip:** Can't find your key file? Run this to locate it:
+> ```bash
+> claude -p "find the path of most recently downloaded .json file in ~/Desktop, ~/Documents, and ~/Downloads"
+> ```
 
 <details>
-<summary><strong>Claude Desktop, Cursor, Windsurf</strong></summary>
+<summary><strong>Claude Desktop</strong></summary>
 
-Add this entry under `mcpServers` in the client's config file
-(Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`,
-Cursor: `~/.cursor/mcp.json`, Windsurf: `~/.codeium/windsurf/mcp_config.json`).
-Edit the file; do not overwrite it, or the other servers in it are lost.
+Paste this whole block into Terminal, hit Enter, then restart Claude Desktop.
+
+```bash
+cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
+{
+  "mcpServers": {
+    "awesome-gsc": {
+      "command": "npx",
+      "args": ["-y", "awesome-gsc-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "{Path to your json file}"
+      }
+    }
+  }
+}
+EOF
+```
+
+Here is an example:
+```
+"GOOGLE_APPLICATION_CREDENTIALS": "/Users/Magdoub/Desktop/mobilevitals-service.json"
+```
+
+</details>
+
+<details>
+<summary><strong>Cursor</strong></summary>
+
+Config file: `.cursor/mcp.json` in your project root (or `~/.cursor/mcp.json` globally)
 
 ```json
-"awesome-gsc": {
-  "command": "node",
-  "args": ["/path/to/awesome-gsc-mcp/dist/cli.js"],
-  "env": {
-    "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/service-account-key.json"
+{
+  "mcpServers": {
+    "awesome-gsc": {
+      "command": "npx",
+      "args": ["-y", "awesome-gsc-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/service-account-key.json"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Windsurf</strong></summary>
+
+Config file: `~/.codeium/windsurf/mcp_config.json`
+
+```json
+{
+  "mcpServers": {
+    "awesome-gsc": {
+      "command": "npx",
+      "args": ["-y", "awesome-gsc-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/service-account-key.json"
+      }
+    }
   }
 }
 ```
@@ -164,8 +196,9 @@ Edit the file; do not overwrite it, or the other servers in it are lost.
 
 | Error | Fix |
 | --- | --- |
-| `401 Unauthorized` | The key was deleted or rotated: create a new JSON key for the service account |
-| `403 User does not have sufficient permission` | Add the service account email (Restricted, or Full if 403 persists) in Search Console > [Settings > Users and permissions](https://search.google.com/search-console/users) |
+| `401 Token has been expired or revoked` | Delete `~/.awesome-gsc-mcp/token.json` and re-authorize |
+| `403 User does not have sufficient permission` | Add the service account email as **Owner** in Search Console > [Settings > Users and permissions](https://search.google.com/search-console/users) |
+| `403 Forbidden` with OAuth | Add yourself as a test user in Google Cloud Console > OAuth consent screen, or publish the app |
 | `Could not load the default credentials` | Check that `GOOGLE_APPLICATION_CREDENTIALS` points to a valid key file |
 
 </details>
@@ -175,14 +208,16 @@ Edit the file; do not overwrite it, or the other servers in it are lost.
 ## Tool Reference
 
 <details>
-<summary><strong>All 23 tools organized by category</strong></summary>
+<summary><strong>All 27 tools organized by category</strong></summary>
 
-### Properties (2 tools)
+### Property Management (4 tools)
 
 | Tool | Description |
 | --- | --- |
 | `list_properties` | List all Search Console properties accessible to the authenticated account |
 | `get_property_details` | Get detailed information about a specific property |
+| `add_property` | Add a new site to Search Console |
+| `delete_property` | Remove a site from Search Console |
 
 ### Performance & Traffic (6 tools)
 
@@ -213,12 +248,14 @@ Edit the file; do not overwrite it, or the other servers in it are lost.
 | `batch_inspect_urls` | Inspect multiple URLs in one call |
 | `check_indexing_issues` | Identify common indexing problems across your site |
 
-### Sitemaps (2 tools)
+### Sitemap Management (4 tools)
 
 | Tool | Description |
 | --- | --- |
 | `list_sitemaps` | List all sitemaps submitted for a property |
 | `get_sitemap_details` | Get detailed information about a specific sitemap |
+| `submit_sitemap` | Submit a new sitemap to Search Console |
+| `delete_sitemap` | Remove a sitemap from Search Console |
 
 ### Query Intelligence (3 tools)
 
@@ -330,6 +367,9 @@ Which of my pages are not indexed?
 List all my submitted sitemaps
 ```
 ```
+Submit my new sitemap at example.com/sitemap.xml
+```
+```
 Check indexing status for my top 50 pages
 ```
 ```
@@ -387,6 +427,34 @@ These reports are only available in the Search Console web interface.
 
 ---
 
+## HTTP Transport
+
+<details>
+<summary><strong>Using HTTP instead of stdio</strong></summary>
+
+For environments that prefer HTTP over stdio, start the server with the `--http` flag:
+
+```bash
+npx awesome-gsc-mcp --http
+```
+
+The server listens on port 3000 by default. Override with the `PORT` environment variable:
+
+```bash
+PORT=8080 npx awesome-gsc-mcp --http
+```
+
+Endpoints:
+
+| Path | Method | Description |
+| --- | --- | --- |
+| `/mcp` | POST | MCP protocol endpoint (Streamable HTTP transport) |
+| `/health` | GET | Health check -- returns `{"status":"ok","auth":"..."}` |
+
+</details>
+
+---
+
 ## FAQ
 
 <details>
@@ -434,6 +502,9 @@ npm run lint
 
 # Start locally (stdio)
 npm start
+
+# Start locally (HTTP)
+npm start -- --http
 ```
 
 </details>
