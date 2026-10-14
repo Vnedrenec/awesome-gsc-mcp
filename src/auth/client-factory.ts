@@ -1,22 +1,21 @@
 /**
- * Auto-detecting authentication client factory for Google Search Console.
+ * Authentication client factory for Google Search Console.
  *
- * Tries authentication methods in priority order and returns the first
- * one that succeeds, along with metadata about which method was used.
+ * Service account only, with a read-only scope. OAuth was removed on purpose:
+ * it stores a refresh token for a personal Google account on disk, while a
+ * service account can be given the narrowest Search Console role per property.
  */
 
-import { google, webmasters_v3 } from 'googleapis';
-import type { OAuth2Client } from 'google-auth-library';
+import { webmasters_v3 } from 'googleapis';
 import type { GoogleAuth } from 'googleapis-common';
 import {
   loadServiceAccountCredentials,
   createServiceAccountAuth,
 } from './service-account.js';
-import { loadOAuthCredentials, createOAuthClient } from './oauth.js';
 import { AuthenticationError, AuthorizationError } from '../errors/gsc-error.js';
 
-export type AuthMethod = 'service-account' | 'oauth' | 'none';
-export type AuthClient = GoogleAuth | OAuth2Client;
+export type AuthMethod = 'service-account';
+export type AuthClient = GoogleAuth;
 
 export interface AuthResult {
   auth: AuthClient;
@@ -27,46 +26,28 @@ export interface AuthResult {
 const SETUP_GUIDE = `
 ===== Google Search Console MCP - Authentication Setup =====
 
-No valid credentials found. Set up authentication using one of these methods:
+No valid credentials found. This server only accepts a service account:
 
---- Option 1: Service Account (recommended for servers) ---
   1. Create a service account in Google Cloud Console
   2. Download the JSON key file
   3. Add the service account email as a user in Search Console
-     (Search Console -> Settings -> Users and permissions)
+     (Search Console -> Settings -> Users and permissions).
+     "Restricted" permission is enough; never make it an Owner.
   4. Set the environment variable:
      export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
-
---- Option 2: OAuth 2.0 (recommended for local/personal use) ---
-  1. Create OAuth 2.0 credentials in Google Cloud Console
-     (APIs & Services -> Credentials -> Create -> OAuth client ID -> Desktop app)
-  2. Download the client secrets JSON file
-  3. Set the environment variable:
-     export GSC_OAUTH_CLIENT_SECRETS_FILE="/path/to/client-secrets.json"
-  4. On first run, follow the browser prompt to authorize
-
---- Option 3: Auto-detect credentials.json ---
-  Place a credentials.json file (service account key or OAuth client secrets)
-  in the current working directory. The type will be detected automatically.
 
 ================================================================
 `.trim();
 
 /**
- * Attempts to create an authenticated Search Console client by trying
- * all supported authentication methods in priority order.
+ * Creates an authenticated Search Console client from service account
+ * credentials (GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_SERVICE_ACCOUNT_KEY).
  *
- * Priority:
- * 1. Service account (GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_SERVICE_ACCOUNT_KEY)
- * 2. OAuth (GSC_OAUTH_CLIENT_SECRETS_FILE)
- * 3. Auto-detect ./credentials.json (inspects the "type" field)
- *
- * @throws {AuthenticationError} If no credentials are found or all methods fail.
+ * @throws {AuthenticationError} If no credentials are found or they are invalid.
  */
 export async function createAuthenticatedClient(): Promise<AuthResult> {
-  const errors: string[] = [];
+  let detail = '';
 
-  // 1. Service Account
   try {
     const credentials = loadServiceAccountCredentials();
     if (credentials) {
@@ -82,65 +63,8 @@ export async function createAuthenticatedClient(): Promise<AuthResult> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    errors.push(`Service account: ${message}`);
+    detail = `\n\nService account: ${message}`;
   }
-
-  // 2. OAuth (explicit env var)
-  try {
-    const oauthSecrets = loadOAuthCredentials();
-    if (oauthSecrets) {
-      const oauth2Client = await createOAuthClient(oauthSecrets);
-      const creds = oauthSecrets.installed ?? oauthSecrets.web;
-      const identity = creds?.client_id ?? 'unknown';
-      process.stderr.write(`[auth] Authenticated via OAuth: ${identity}\n`);
-      return {
-        auth: oauth2Client,
-        method: 'oauth',
-        identity,
-      };
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    errors.push(`OAuth: ${message}`);
-  }
-
-  // 3. Auto-detect ./credentials.json as OAuth client secrets
-  //    (Service account credentials.json is already handled in step 1 via
-  //    loadServiceAccountCredentials, which checks ./credentials.json as a fallback.)
-  try {
-    const { existsSync, readFileSync } = await import('fs');
-    const fallbackPath = 'credentials.json';
-
-    if (existsSync(fallbackPath)) {
-      const raw = readFileSync(fallbackPath, 'utf-8');
-      const data = JSON.parse(raw) as Record<string, unknown>;
-
-      // If it has "installed" or "web" keys, treat as OAuth client secrets.
-      if ('installed' in data || 'web' in data) {
-        const oauth2Client = await createOAuthClient(data as import('./oauth.js').OAuthClientSecrets);
-        const creds = (data as import('./oauth.js').OAuthClientSecrets).installed ??
-          (data as import('./oauth.js').OAuthClientSecrets).web;
-        const identity = creds?.client_id ?? 'unknown';
-        process.stderr.write(
-          `[auth] Authenticated via OAuth (auto-detected credentials.json): ${identity}\n`,
-        );
-        return {
-          auth: oauth2Client,
-          method: 'oauth',
-          identity,
-        };
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    errors.push(`Auto-detect credentials.json: ${message}`);
-  }
-
-  // All methods exhausted.
-  const detail =
-    errors.length > 0
-      ? `\n\nAttempted methods:\n${errors.map((e) => `  - ${e}`).join('\n')}`
-      : '';
 
   throw new AuthenticationError(
     `No valid Google Search Console credentials found.${detail}`,
@@ -170,8 +94,7 @@ export async function validateConnection(
         {
           recoveryHint:
             'Your credentials may be revoked or expired.\n' +
-            '  - Service account: re-download the JSON key from Google Cloud Console.\n' +
-            '  - OAuth: delete ~/.awesome-gsc-mcp/token.json and re-authorize.',
+            'Re-download the service account JSON key from Google Cloud Console.',
           cause: err,
         },
       );
@@ -182,9 +105,7 @@ export async function validateConnection(
         'Credentials are valid but lack permission to access Search Console.',
         {
           recoveryHint:
-            'Ensure the authenticated account has access:\n' +
-            '  - Service account: add its email in Search Console -> Settings -> Users and permissions.\n' +
-            '  - OAuth: make sure the Google account has at least one verified property.',
+            'Add the service account email in Search Console -> Settings -> Users and permissions.',
           cause: err,
         },
       );

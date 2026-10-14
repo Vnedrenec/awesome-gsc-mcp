@@ -1,10 +1,13 @@
 /**
  * Service account credential loading for Google Search Console API.
  *
- * Supports three discovery methods (tried in priority order):
+ * Supports two discovery methods (tried in priority order):
  * 1. GOOGLE_APPLICATION_CREDENTIALS env var (path to JSON key file)
  * 2. GOOGLE_SERVICE_ACCOUNT_KEY env var (inline JSON string)
- * 3. ./credentials.json in the current working directory
+ *
+ * The key is never picked up from the working directory: a stray
+ * credentials.json in whatever folder the client starts us in must not
+ * silently decide which Google identity we act as.
  */
 
 import { google } from 'googleapis';
@@ -33,7 +36,9 @@ const REQUIRED_FIELDS: ReadonlyArray<keyof ServiceAccountCredentials> = [
   'token_uri',
 ];
 
-const WEBMASTERS_SCOPE = 'https://www.googleapis.com/auth/webmasters';
+// Read-only scope: Google itself rejects any write (adding or removing
+// properties and sitemaps), whatever the account's role in Search Console.
+const WEBMASTERS_READONLY_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 
 /**
  * Validates that a parsed JSON object contains all required service account fields.
@@ -97,7 +102,6 @@ function readJsonFile(filePath: string, sourceLabel: string): unknown {
  * Discovery order:
  * 1. `GOOGLE_APPLICATION_CREDENTIALS` env var -- path to a JSON key file
  * 2. `GOOGLE_SERVICE_ACCOUNT_KEY` env var -- raw JSON string
- * 3. `./credentials.json` in the current working directory (only if type is "service_account")
  *
  * @returns The validated credentials, or `null` if no source is available.
  */
@@ -121,27 +125,6 @@ export function loadServiceAccountCredentials(): ServiceAccountCredentials | nul
     return validateCredentials(data);
   }
 
-  // 3. ./credentials.json fallback (only if it's a service account file)
-  const fallbackPath = 'credentials.json';
-  if (existsSync(fallbackPath)) {
-    let data: unknown;
-    try {
-      const raw = readFileSync(fallbackPath, 'utf-8');
-      data = JSON.parse(raw) as unknown;
-    } catch {
-      // If the file can't be parsed, silently skip -- it may be an OAuth file
-      // handled by the OAuth loader.
-      return null;
-    }
-
-    if (typeof data === 'object' && data !== null && (data as Record<string, unknown>)['type'] === 'service_account') {
-      return validateCredentials(data);
-    }
-
-    // Not a service account file; return null so other auth methods can try.
-    return null;
-  }
-
   return null;
 }
 
@@ -158,6 +141,6 @@ export function createServiceAccountAuth(
       private_key: credentials.private_key,
     },
     projectId: credentials.project_id,
-    scopes: [WEBMASTERS_SCOPE],
+    scopes: [WEBMASTERS_READONLY_SCOPE],
   });
 }

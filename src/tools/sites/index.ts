@@ -51,7 +51,7 @@ export function registerSiteTools(server: McpServer, api: GscApiClient): void {
 
         const recommendations: string[] = [];
         if (sites.length === 0) {
-          recommendations.push('No properties found. Use add_property to add a site, or verify your credentials have access.');
+          recommendations.push('No properties found. Add the service account email as a user of the property in Search Console, then retry.');
         }
 
         const limitations = [
@@ -105,76 +105,6 @@ export function registerSiteTools(server: McpServer, api: GscApiClient): void {
         ];
 
         const text = formatToolResponse(createToolResponse(data, summary, recommendations, limitations));
-        return { content: [{ type: 'text' as const, text }] };
-      } catch (error) {
-        return errorResponse(error);
-      }
-    },
-  );
-
-  // ── add_property ─────────────────────────────────────────────────────
-  server.tool(
-    'add_property',
-    'Add a new site property to Google Search Console',
-    { siteUrl: siteUrlSchema },
-    async ({ siteUrl }) => {
-      try {
-        await api.addSite(siteUrl);
-
-        const propertyType = getPropertyType(siteUrl);
-        const summary = `Successfully added ${siteUrl} as a ${propertyType.toLowerCase()}.`;
-
-        const recommendations = [
-          'The property must be verified before you can access its data.',
-          'Go to Google Search Console to complete the verification process.',
-          'For domain properties, DNS verification is required.',
-          'For URL-prefix properties, multiple verification methods are available (HTML file, meta tag, Google Analytics, etc.).',
-        ];
-
-        const limitations = [
-          'Adding a property does not automatically verify ownership.',
-          'Data will only be available after verification is complete.',
-        ];
-
-        const text = formatToolResponse(createToolResponse(
-          `Property **${siteUrl}** (${propertyType}) has been added to Google Search Console.`,
-          summary,
-          recommendations,
-          limitations,
-        ));
-        return { content: [{ type: 'text' as const, text }] };
-      } catch (error) {
-        return errorResponse(error);
-      }
-    },
-  );
-
-  // ── delete_property ──────────────────────────────────────────────────
-  server.tool(
-    'delete_property',
-    'Remove a site property from Google Search Console (permanent)',
-    { siteUrl: siteUrlSchema },
-    async ({ siteUrl }) => {
-      try {
-        await api.deleteSite(siteUrl);
-
-        const summary = `Successfully removed ${siteUrl} from Google Search Console.`;
-
-        const recommendations = [
-          'If you deleted this property by mistake, you can re-add it with add_property and verify ownership again.',
-        ];
-
-        const limitations = [
-          'This action is permanent. Historical data for this property may no longer be accessible.',
-          'Other users who had access to this property will also lose access.',
-        ];
-
-        const text = formatToolResponse(createToolResponse(
-          `Property **${siteUrl}** has been removed from Google Search Console.`,
-          summary,
-          recommendations,
-          limitations,
-        ));
         return { content: [{ type: 'text' as const, text }] };
       } catch (error) {
         return errorResponse(error);
