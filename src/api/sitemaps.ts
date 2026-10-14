@@ -18,6 +18,14 @@ import type { SitemapInfo, SitemapContent } from './types.js';
 // ---------------------------------------------------------------------------
 
 /**
+ * The API returns counters as int64 strings, so "0" is truthy. Map a zero
+ * count to undefined: every caller treats a truthy value as "has errors".
+ */
+function nonZeroCount(value: string | null | undefined): string | undefined {
+  return value && Number(value) !== 0 ? value : undefined;
+}
+
+/**
  * Map a raw API sitemap entry to our typed {@link SitemapInfo}.
  */
 function toSitemapInfo(raw: webmasters_v3.Schema$WmxSitemap): SitemapInfo {
@@ -34,8 +42,8 @@ function toSitemapInfo(raw: webmasters_v3.Schema$WmxSitemap): SitemapInfo {
     isSitemapsIndex: raw.isSitemapsIndex ?? false,
     type: raw.type ?? 'unknown',
     lastDownloaded: raw.lastDownloaded ?? undefined,
-    warnings: raw.warnings ?? undefined,
-    errors: raw.errors ?? undefined,
+    warnings: nonZeroCount(raw.warnings),
+    errors: nonZeroCount(raw.errors),
     contents: contents.length > 0 ? contents : undefined,
   };
 }
