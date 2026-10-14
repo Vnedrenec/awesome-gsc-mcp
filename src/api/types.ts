@@ -62,6 +62,8 @@ export interface SitemapContent {
 
 export interface InspectionResult {
   inspectionResultLink: string;
+  /** Set by batch inspection when this one URL failed; the other URLs still run. */
+  error?: string;
   indexStatusResult?: {
     verdict: string;
     coverageState: string;

@@ -29,6 +29,7 @@ import { generateRecommendations } from '../../analysis/recommendation-engine.js
 // Utility modules
 import { getDateRange, getPreviousPeriod, formatDate, daysBetween } from '../../utils/date-helpers.js';
 import { formatNumber, formatPercent, formatPosition, formatChange } from '../../utils/formatting.js';
+import { topRowsByClicks, TOP_ROWS_FETCH_LIMIT } from '../../api/search-analytics.js';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -681,9 +682,9 @@ export function registerReportTools(server: McpServer, api: GscApiClient): void 
         let ctrScore = 50; // default
         const ctrResult = await safeSection('CTR Efficiency', async () => {
           const res = await api.querySearchAnalytics(buildRequest(
-            siteUrl, dateRange28d.startDate, dateRange28d.endDate, type, ['query'], 100,
+            siteUrl, dateRange28d.startDate, dateRange28d.endDate, type, ['query'], TOP_ROWS_FETCH_LIMIT,
           ));
-          return res.rows;
+          return topRowsByClicks(res.rows, 100);
         });
 
         if (ctrResult.ok) {

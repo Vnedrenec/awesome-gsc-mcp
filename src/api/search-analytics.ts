@@ -84,6 +84,25 @@ function chooseTtl(request: SearchAnalyticsRequest): number {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Rows fetched before ranking, so the top N is chosen from enough data. */
+export const TOP_ROWS_FETCH_LIMIT = 5000;
+
+/**
+ * Pick the top `limit` rows by clicks, then impressions.
+ *
+ * The API's own order only holds while clicks differ. On small sites most
+ * clicks land on anonymized queries, every visible row has 0 clicks, and the
+ * API returns them alphabetically, so its first N rows are not the top N.
+ */
+export function topRowsByClicks<T extends { clicks: number; impressions: number }>(
+  rows: readonly T[],
+  limit: number,
+): T[] {
+  return [...rows]
+    .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
+    .slice(0, limit);
+}
+
 /**
  * Query search analytics data with automatic pagination.
  *

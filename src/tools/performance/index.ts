@@ -17,6 +17,7 @@ import {
   formatToolResponse,
 } from '../schemas.js';
 import { getDateRange, getPreviousPeriod } from '../../utils/date-helpers.js';
+import { topRowsByClicks, TOP_ROWS_FETCH_LIMIT } from '../../api/search-analytics.js';
 import {
   formatNumber,
   formatPercent,
@@ -463,7 +464,7 @@ export function registerPerformanceTools(server: McpServer, api: GscApiClient): 
             dimensions: ['query'],
             searchType: params.searchType,
             dimensionFilterGroups,
-            rowLimit: params.limit,
+            rowLimit: Math.max(params.limit, TOP_ROWS_FETCH_LIMIT),
             dataState: 'all',
           }),
           api.querySearchAnalytics({
@@ -476,7 +477,7 @@ export function registerPerformanceTools(server: McpServer, api: GscApiClient): 
           }),
         ]);
 
-        const rows = queryResponse.rows;
+        const rows = topRowsByClicks(queryResponse.rows, params.limit);
         const totalClicks = totalsResponse.rows[0]?.clicks ?? 0;
 
         if (rows.length === 0) {
@@ -567,7 +568,7 @@ export function registerPerformanceTools(server: McpServer, api: GscApiClient): 
             dimensions: ['page'],
             searchType: params.searchType,
             dimensionFilterGroups,
-            rowLimit: params.limit,
+            rowLimit: Math.max(params.limit, TOP_ROWS_FETCH_LIMIT),
             dataState: 'all',
           }),
           api.querySearchAnalytics({
@@ -580,7 +581,7 @@ export function registerPerformanceTools(server: McpServer, api: GscApiClient): 
           }),
         ]);
 
-        const rows = pageResponse.rows;
+        const rows = topRowsByClicks(pageResponse.rows, params.limit);
         const totalClicks = totalsResponse.rows[0]?.clicks ?? 0;
 
         if (rows.length === 0) {

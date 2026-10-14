@@ -38,6 +38,7 @@ interface RichResultsResult {
 
 interface InspectionResult {
   inspectionResultLink: string;
+  error?: string;
   indexStatusResult?: IndexStatusResult;
   mobileUsabilityResult?: MobileUsabilityResult;
   richResultsResult?: RichResultsResult;
@@ -366,8 +367,8 @@ export function registerIndexingTools(server: McpServer, api: GscApiClient): voi
           parts.push('\n### Errors\n');
           parts.push('| URL | Details |');
           parts.push('| --- | --- |');
-          for (const { url } of errors) {
-            parts.push(`| ${url} | No index status data returned |`);
+          for (const { url, result } of errors) {
+            parts.push(`| ${url} | ${result.error ?? 'No index status data returned'} |`);
           }
         }
 
@@ -524,7 +525,7 @@ export function registerIndexingTools(server: McpServer, api: GscApiClient): voi
               issueCounts.set('Blocked by robots.txt', (issueCounts.get('Blocked by robots.txt') ?? 0) + 1);
             }
           } else {
-            issues.push('No index status data available');
+            issues.push(result.error ? `Inspection failed: ${result.error}` : 'No index status data available');
             issueCounts.set('No data', (issueCounts.get('No data') ?? 0) + 1);
           }
 

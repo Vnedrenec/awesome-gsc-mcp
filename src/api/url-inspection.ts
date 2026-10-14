@@ -17,6 +17,9 @@ import type { InspectionResult } from './types.js';
 /** Maximum URLs accepted by `batchInspectUrls`. */
 const MAX_BATCH_SIZE = 50;
 
+/** Parallel inspections per batch; the API allows 600 per minute per property. */
+const BATCH_CONCURRENCY = 5;
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -143,12 +146,24 @@ export async function batchInspectUrls(
     );
   }
 
-  const results: InspectionResult[] = [];
+  const results: InspectionResult[] = new Array(urls.length);
 
-  for (const url of urls) {
-    const result = await inspectUrl(client, siteUrl, url, cache, rateLimiter);
-    results.push(result);
-  }
+  // One inspection takes seconds, so 50 in sequence outlast client timeouts.
+  // A few workers share the queue; results keep the input order.
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < urls.length) {
+      const i = next++;
+      // One failing URL must not throw away the results already collected.
+      try {
+        results[i] = await inspectUrl(client, siteUrl, urls[i]!, cache, rateLimiter);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        results[i] = { inspectionResultLink: '', error: message };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, urls.length) }, worker));
 
   return results;
 }
